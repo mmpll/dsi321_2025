@@ -6,14 +6,6 @@ from pathlib import Path
 from prefect import flow, task
 
 
-districts_gdf = gpd.read_file(Path(__file__).parent / 'bangkok_districts.geojson')
-
-if districts_gdf.crs is None:
-    districts_gdf.set_crs(epsg=4326, inplace=True)
-else:
-    districts_gdf = districts_gdf.to_crs(epsg=4326)
-
-
 @task
 def fetch_data() -> list[dict]:
     try:
@@ -29,9 +21,23 @@ def fetch_data() -> list[dict]:
 
 
 @task
-def data_processing(data: list[dict]) -> pd.DataFrame:
+def data_processing(data: list[dict], districts_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
     df = pd.DataFrame(data)
 
+    # check
+    if 'AQILast' not in df.columns:
+        print("❌ 'AQILast' column not found in the data. Skipping this run.")
+        return pd.DataFrame()
+
+    # check
+    if df['AQILast'].dropna().empty:
+        print("❌ 'AQILast' column is empty. Skipping this run.")
+        return pd.DataFrame()
+
+    print("Sample AQILast:")
+    print(df['AQILast'].dropna().iloc[0])
+
+    # Flatten AQILast
     print("Sample AQILast:")
     print(df['AQILast'].dropna().iloc[0])       
     aqi_data = pd.json_normalize(df['AQILast'])
@@ -50,10 +56,14 @@ def data_processing(data: list[dict]) -> pd.DataFrame:
         else:
             print(f"⚠️ Warning: Column '{col}' not found in DataFrame")
 
-    df['time'] = df['time'].mode()[0]
-    df['date'] = df['date'].mode()[0]
-    df['timestamp'] = pd.to_datetime(df['date'] + ' ' + df['time'])
-
+    if 'time' in df.columns and 'date' in df.columns:
+        df['time'] = df['time'].mode()[0]
+        df['date'] = df['date'].mode()[0]
+        df['timestamp'] = pd.to_datetime(df['date'] + ' ' + df['time'])
+    else:
+        print("❌ Missing 'time' or 'date' columns.")
+        return pd.DataFrame()
+        
     df['year'] = df['timestamp'].dt.year
     df['month'] = df['timestamp'].dt.month
     df['day'] = df['timestamp'].dt.day
@@ -107,30 +117,56 @@ def load_to_lakefs(df: pd.DataFrame, lakefs_s3_path: str, storage_options: dict)
 
 @flow(name='dust-concentration-pipeline', log_prints=True)
 def main_flow():
-    data = fetch_data()
-    df = data_processing(data)
+    try:
+        geojson_path = Path("/home/jovyan/work/bangkok_districts.geojson")
+        print(f"🔍 Loading GeoJSON from: {geojson_path}")
+        districts_gdf = gpd.read_file(geojson_path)
 
-    print(df.head())
+        if districts_gdf.crs is None:
+            districts_gdf.set_crs(epsg=4326, inplace=True)
+        else:
+            districts_gdf = districts_gdf.to_crs(epsg=4326)
+    except Exception as e:
+        print(f"❌ Failed to load GeoJSON: {e}")
+        return
 
-    ACCESS_KEY = "access_key"
-    SECRET_KEY = "secret_key"
-    lakefs_endpoint = "http://lakefs-dev:8000/"
+    try:
+        data = fetch_data()
 
-    repo = "dust-concentration"
-    branch = "main"
-    path = "pm_data.parquet"
+        if not data:
+            print("❌ No data fetched.")
+            return
 
-    lakefs_s3_path = f"s3a://{repo}/{branch}/{path}"
+        df = data_processing(data, districts_gdf)
 
-    storage_options = {
-        "key": ACCESS_KEY,
-        "secret": SECRET_KEY,
-        "client_kwargs": {
-            "endpoint_url": lakefs_endpoint
+        if df.empty:
+            print("❌ Processed DataFrame is empty. Skipping load.")
+            return
+
+        print(df.head())
+
+        ACCESS_KEY = "access_key"
+        SECRET_KEY = "secret_key"
+        lakefs_endpoint = "http://lakefs-dev:8000/"
+
+        repo = "dust-concentration"
+        branch = "main"
+        path = "pm_data.parquet"
+
+        lakefs_s3_path = f"s3a://{repo}/{branch}/{path}"
+
+        storage_options = {
+            "key": ACCESS_KEY,
+            "secret": SECRET_KEY,
+            "client_kwargs": {
+                "endpoint_url": lakefs_endpoint
+            }
         }
-    }
 
-    load_to_lakefs(df, lakefs_s3_path, storage_options)
+        load_to_lakefs(df, lakefs_s3_path, storage_options)
+    except Exception as e:
+        print(f"❌ Flow failed: {e}")
+        return  
 
 
 if __name__ == "__main__":
