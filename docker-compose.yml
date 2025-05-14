@@ -77,13 +77,14 @@ services:
     ports:
       - "8502:8501"
     volumes:
-      - ${PWD}/visualization:/home/jovyan/work:rw
+      - ./visualization:/app
     environment:
       - AWS_ACCESS_KEY_ID=access_key
       - AWS_SECRET_ACCESS_KEY=secret_key
     depends_on:
       - lakefs-dev
-    entrypoint: ["streamlit", "run", "/home/jovyan/work/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    entrypoint: ["streamlit", "run", "/app/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+
     networks:
       - shared-net
       
