@@ -206,7 +206,7 @@ else:
     daily_mean_pm25 = df["PM25.value"].mean()
     level, color = get_aqi_level_and_color(daily_mean_aqi)
 
-    col1, col2, col3 = st.columns([1, 1, 2.7])
+    col1, col2, col3 = st.columns([1.5, 1.5, 2])
     with col1:
         st.markdown(f"""
             <div style="
