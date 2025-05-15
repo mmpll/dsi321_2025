@@ -85,6 +85,7 @@ def get_latest_hour_key():
         return "no-data"
     fs.invalidate_cache(f"{date_path}/")
     hour_paths = fs.glob(f"{date_path}/hour=*")
+    hour_paths = sorted(hour_paths, key=lambda p: int(p.split("/")[-1].split("=")[1]))
     #st.write("📂 hour_paths =", hour_paths) 
     if not hour_paths:
         return f"{date_path}-no-hour"
@@ -205,7 +206,7 @@ else:
     daily_mean_pm25 = df["PM25.value"].mean()
     level, color = get_aqi_level_and_color(daily_mean_aqi)
 
-    col1, col2, col3 = st.columns([1, 1, 3])
+    col1, col2, col3 = st.columns([1, 1, 2.7])
     with col1:
         st.markdown(f"""
             <div style="
@@ -290,6 +291,7 @@ else:
 
         top5 = df_latest_filtered.nlargest(5, "AQI.aqi")["nameTH"].unique()
         df_top5 = df[df["nameTH"].isin(top5)].copy()
+        df_top5 = df_top5.sort_values("timestamp")
 
         fig_top5 = px.line(
             df_top5,
