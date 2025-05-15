@@ -291,6 +291,8 @@ else:
         top5 = df_latest_filtered.nlargest(5, "AQI.aqi")["nameTH"].unique()
         df_top5 = df[df["nameTH"].isin(top5)].copy()
 
+        df_top5["hour_str"] = df_top5["timestamp"].dt.hour.astype(str).str.zfill(2)
+
         fig_top5 = px.line(
             df_top5,
             x="hour_str",
@@ -301,24 +303,21 @@ else:
             category_orders={"hour_str": [f"{i:02d}" for i in range(24)]}
         )
 
+    fig_top5.update_layout(
+        height=350,
+        margin=dict(l=0, r=0, t=40, b=80),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-1.1,
+            xanchor="center",
+            x=0.5
+        ),
+        font=dict(family="Kanit", size=12),
+        xaxis_title="ชั่วโมง",
+    )
 
-        fig_top5.update_layout(
-            height=350,
-            margin=dict(l=0, r=0, t=40, b=80),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-1.1,
-                xanchor="center",
-                x=0.5
-            ),
-            font=dict(family="Kanit", size=12),
-            xaxis=dict(
-                tickformat="%H:%M", 
-            )
-        )
-
-        st.plotly_chart(fig_top5, use_container_width=True)
+    st.plotly_chart(fig_top5, use_container_width=True)
 
     # ---------- Latest hour table ----------
     st.subheader("ข้อมูลทั้งหมด (ชั่วโมงล่าสุด)")
