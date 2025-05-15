@@ -70,6 +70,9 @@ def data_processing(data: list[dict], districts_gdf: gpd.GeoDataFrame) -> pd.Dat
     df['day'] = df['timestamp'].dt.day
     df['hour'] = df['timestamp'].dt.hour
 
+    # สร้างคอลัมน์ 'hour_str' ที่ format เป็นเลขสองหลัก
+    df['hour_str'] = df['hour'].astype(str).str.zfill(2)
+    
     # geometry and spatial join
     stations_gdf = gpd.GeoDataFrame(
         df,
