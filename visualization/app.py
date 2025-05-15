@@ -293,12 +293,14 @@ else:
 
         fig_top5 = px.line(
             df_top5,
-            x="timestamp",
+            x="hour_str",
             y="AQI.aqi",
             color="nameTH",
             markers=True,
-            labels={"timestamp": "เวลา", "AQI.aqi": "ค่า AQI", "nameTH": "ชื่อสถานที่"},
+            labels={"hour_str": "ชั่วโมง", "AQI.aqi": "ค่า AQI", "nameTH": "ชื่อสถานที่"},
+            category_orders={"hour_str": [f"{i:02d}" for i in range(24)]}
         )
+
 
         fig_top5.update_layout(
             height=350,
