@@ -123,15 +123,29 @@ def load_latest_day_data(key):
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     return df, now, None, True
 
+@st.cache_data(ttl=75)
+def load_forecast_data():
+    forecast_path = f"{repo}/{branch}/forecast/forecast.parquet"
+    try:
+        df = pd.read_parquet(f"s3a://{forecast_path}", storage_options=storage_options)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
+    except Exception as e:
+        st.error(f"ไม่สามารถโหลดข้อมูล forecast ได้: {e}")
+        return pd.DataFrame()
+
 # ---------- Load & display ----------
 cache_key = get_latest_hour_key()
 df, cache_time, _, is_complete = load_latest_day_data(cache_key)
 
 if not is_complete:
-    st.warning("⚠️ ข้อมูลบางชั่วโมงยังมาไม่ครบ กำลังโหลดใหม่...")
-    time.sleep(10)
-    st.rerun()
-
+    st.warning("⚠️ ข้อมูลบางชั่วโมงยังมาไม่ครบ")
+    if st.button("🔄 รีเซ็ต Cache และโหลดใหม่"):
+        st.cache_data.clear()
+        st.session_state.last_load_time = time.time()
+        st.rerun()
+    st.stop()
+    
 st.subheader("รายงานคุณภาพอากาศในกรุงเทพมหานคร")
 thai_time = cache_time.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Asia/Bangkok"))
 #st.caption(f"cache_key = {cache_key}")
@@ -157,7 +171,7 @@ df_latest["AQI_level"], df_latest["AQI_color"] = zip(*df_latest["AQI.aqi"].apply
 df_latest['search_key'] = df_latest['nameTH'] + " (" + df_latest['district'] + ")"
 search_list = sorted(df_latest['search_key'].unique())
 default_location = "สำนักงานเขตคลองเตย (คลองเตย)"
-selected_search = st.selectbox("ค้นหาชื่อสถานที่หรือเขต", search_list, index=search_list.index(default_location))
+selected_search = st.selectbox("ค้นหาสถานที่หรือเขต", search_list, index=search_list.index(default_location))
 
 # ---------- Display selected location ----------
 df_filtered = df_latest[df_latest['search_key'] == selected_search]
@@ -206,7 +220,7 @@ else:
     daily_mean_pm25 = df["PM25.value"].mean()
     level, color = get_aqi_level_and_color(daily_mean_aqi)
 
-    col1, col2, col3 = st.columns([1.5, 1.5, 2])
+    col1, col2, col3 = st.columns([1, 1, 2.7])
     with col1:
         st.markdown(f"""
             <div style="
@@ -302,6 +316,8 @@ else:
             labels={"timestamp": "เวลา", "AQI.aqi": "ค่า AQI", "nameTH": "ชื่อสถานที่"},
         )
 
+        color_map = {trace.name: trace.line.color for trace in fig_top5.data}
+
         fig_top5.update_layout(
             height=350,
             margin=dict(l=0, r=0, t=40, b=80),
@@ -319,8 +335,68 @@ else:
         )
 
         st.plotly_chart(fig_top5, use_container_width=True)
+    
+    # ---------- forecast chart ----------
+    forecast_df = load_forecast_data()
+
+    exclude_names = ["สำนักงานเขตบางคอแหลม (Mobile)", "การเคหะชุมชนห้วยขวาง "]
+    df_latest_filtered = df_latest[~df_latest["nameTH"].isin(exclude_names)]
+    top5 = df_latest_filtered.nlargest(5, "AQI.aqi")["nameTH"].unique().tolist()
+
+
+    st.markdown("#### พยากรณ์คุณภาพอากาศล่วงหน้า")
+
+    selected_places = st.multiselect("เลือกสถานที่", options=forecast_df["nameTH"].unique(), default=top5)
+
+    forecast_filtered = forecast_df[forecast_df["nameTH"].isin(selected_places)].copy()
+    forecast_filtered = forecast_filtered.sort_values("timestamp")
+
+    colfaqi, colfpm25 = st.columns([1, 1])
+    
+    # ---------- AQI forecast ----------
+    with colfaqi:
+        st.markdown("#### พยากรณ์ AQI")
+        fig_aqi = px.line(
+            forecast_filtered,
+            x="timestamp",
+            y="AQI_forecast",
+            color="nameTH",
+            markers=True,
+            color_discrete_map=color_map,
+            labels={"timestamp": "เวลา", "AQI_forecast": "ค่า AQI", "nameTH": "สถานที่"}
+        )
+        fig_aqi.update_layout(
+            height=400,
+            margin=dict(l=0, r=0, t=40, b=80),
+            legend=dict(orientation="h", yanchor="bottom", y=-1.1, xanchor="center", x=0.5),
+            font=dict(family="Kanit", size=12),
+            xaxis=dict(tickformat="%H:%M")
+        )
+        st.plotly_chart(fig_aqi, use_container_width=True)
+
+    # ---------- PM2.5 forecast ----------
+    with colfpm25:
+        st.markdown("#### พยากรณ์ PM2.5")
+        fig_pm25 = px.line(
+            forecast_filtered,
+            x="timestamp",
+            y="PM25_forecast",
+            color="nameTH",
+            markers=True,
+            color_discrete_map=color_map,
+            labels={"timestamp": "เวลา", "PM25_forecast": "ค่า PM2.5 (µg/m³)", "nameTH": "สถานที่"}
+        )
+        fig_pm25.update_layout(
+            height=400,
+            margin=dict(l=0, r=0, t=40, b=80),
+            legend=dict(orientation="h", yanchor="bottom", y=-1.1, xanchor="center", x=0.5),
+            font=dict(family="Kanit", size=12),
+            xaxis=dict(tickformat="%H:%M")
+        )
+        st.plotly_chart(fig_pm25, use_container_width=True)
 
     # ---------- Latest hour table ----------
+    st.markdown("")
     st.subheader("ข้อมูลทั้งหมด (ชั่วโมงล่าสุด)")
 
     df_latest_display = df_latest[["timestamp", "nameTH", "district", "AQI.aqi", "PM25.value"]]
