@@ -6,7 +6,7 @@ import plotly.express as px
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from st_aggrid import GridOptionsBuilder, AgGrid
-#from streamlit_autorefresh import st_autorefresh
+from streamlit_autorefresh import st_autorefresh
 
 
 # ---------- Streamlit config ----------
@@ -21,7 +21,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-#st_autorefresh(interval=85000, key="refresh")
+st_autorefresh(interval=110000, key="refresh")
 
 # ---------- Session cache control ----------
 if "last_load_time" not in st.session_state:
@@ -61,7 +61,7 @@ def get_aqi_level_and_color(aqi):
     elif aqi <= 200:
         return "Unhealthy", "#FF0000"
     elif aqi <= 300:
-        return "Very Unhealthy", "#8F3F97"
+        return "Severe", "#8F3F97"
     else:
         return "Hazardous", "#7E0023"
 
@@ -95,7 +95,7 @@ def get_latest_hour_key():
     return f"{date_path}-hour={latest_hour}"
 
 # ---------- Load data ----------
-@st.cache_data(ttl=75)
+@st.cache_data(ttl=100)
 def load_latest_day_data(key):
     _ = key
     now = datetime.now()
@@ -123,7 +123,7 @@ def load_latest_day_data(key):
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     return df, now, None, True
 
-@st.cache_data(ttl=75)
+@st.cache_data(ttl=100)
 def load_forecast_data():
     forecast_path = f"{repo}/{branch}/forecast/forecast.parquet"
     try:
@@ -167,6 +167,7 @@ latest_hour = max(available_hours)
 df_latest = df[df['timestamp'].dt.hour == latest_hour].copy()
 
 # ---------- Create search field ----------
+df_latest = df_latest[df_latest["AQI.aqi"] >= 0].copy()
 df_latest["AQI_level"], df_latest["AQI_color"] = zip(*df_latest["AQI.aqi"].apply(get_aqi_level_and_color))
 df_latest['search_key'] = df_latest['nameTH'] + " (" + df_latest['district'] + ")"
 search_list = sorted(df_latest['search_key'].unique())
@@ -216,11 +217,11 @@ else:
     st.subheader("Dashboard")
     st.markdown("###### ค่าเฉลี่ยคุณภาพอากาศภายในกรุงเทพฯ")
 
-    daily_mean_aqi = df["AQI.aqi"].mean()
-    daily_mean_pm25 = df["PM25.value"].mean()
+    daily_mean_aqi = df_latest["AQI.aqi"].mean()
+    daily_mean_pm25 = df_latest["PM25.value"].mean()
     level, color = get_aqi_level_and_color(daily_mean_aqi)
 
-    col1, col2, col3 = st.columns([1, 1, 2.7])
+    col1, col2, col3 = st.columns([1, 1, 1.9])
     with col1:
         st.markdown(f"""
             <div style="
@@ -291,7 +292,7 @@ else:
             coloraxis_colorbar=dict(
                 title="AQI",
                 tickvals=[0, 50, 100, 150, 200, 300],
-                ticktext=["Good", "Moderate", "Sensitive", "Unhealthy", "Very Unhealthy", "Hazardous"],
+                ticktext=["Good", "Moderate", "Sensitive", "Unhealthy", "Severe", "Hazardous"],
             ),
             font=dict(family="Kanit", size=12)
         )
