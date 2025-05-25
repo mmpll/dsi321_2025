@@ -258,8 +258,8 @@ lakefs://dust-concentration/main/forecast/forecast.parquet
 ├── visualization/                  # Streamlit dashboard implementation
 │   ├── .streamlit/
 │   │   └── config.toml                 # Streamlit UI configuration (theme, layout)
-│   └── app.py                        # Main 
-|   ├── dashboard_demo.png/           # Screenshot of the Streamlit dashboard
+│   ├── app.py                        # Main 
+|   └── dashboard_demo.png/           # Screenshot of the Streamlit dashboard
 Streamlit dashboard application
 │
 ├── .gitignore                      # Git ignored files list
